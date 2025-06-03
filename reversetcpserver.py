@@ -55,7 +55,7 @@ def handle_client(conn, addr):
 def main():
     #检查参数个数和读取参数
     if len(sys.argv) != 2:
-        print("Usage: python server.py <port>")
+        print("Usage: python reversetcpserver.py <port>")
         sys.exit(1)
     port = int(sys.argv[1])
     if port < 1 or port > 65535:
