@@ -64,8 +64,8 @@ def main():
 
     #创建TCP服务器
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind(('0.0.0.0', port))
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  #设置端口复用
+    server_socket.bind(('172.31.53.98', port))
     server_socket.listen(5)
     print(f"Server listening on port {port}...")
 
