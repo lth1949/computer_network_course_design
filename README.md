@@ -1,16 +1,16 @@
-# 2024 北林计算机网络课程设计 - UDP/TCP 程序
+# 2024 北林计算机网络课程设计 - TCP/UDP 程序
 
-本项目包含四个网络通信程序：一个基于 UDP 的可靠传输协议实现（包含客户端和服务器），一个基于 TCP 的字符串反转服务（包含客户端和服务器）。
+本项目包含四个网络通信程序：一个基于 TCP 的字符串反转服务（包含客户端和服务器），一个基于 UDP 的可靠传输协议实现（包含客户端和服务器）。
 
 ## 项目结构
 
 ```
 computer_network_course_design/
 ├── README.md                 # 本说明文档
-├── udpclient.py             # UDP客户端程序
-├── udpserver.py             # UDP服务器程序
 ├── reversetcpclient.py      # TCP客户端程序
-└── reversetcpserver.py      # TCP服务器程序
+├── reversetcpserver.py      # TCP服务器程序
+├── udpclient.py             # UDP客户端程序
+└── udpserver.py             # UDP服务器程序
 ```
 
 ## 运行环境要求
@@ -174,7 +174,7 @@ UDP 部分实现了一个基于 UDP 的可靠传输协议，包含客户端和�
 #### 运行参数
 
 ```bash
-python udpclient.py <server_host> <server_port> [timeout]
+python udpclient.py <server_host> <server_port>
 ```
 
 **参数说明**:
@@ -183,16 +183,12 @@ python udpclient.py <server_host> <server_port> [timeout]
   - 支持特殊地址: `localhost`, `127.0.0.1`
   - 支持 IPv4 地址: 例如 `192.168.1.1`
 - `server_port`: 服务器端口号 (1024-65535)
-- `timeout`: 超时时间，单位毫秒 (1-10000ms，可选，默认 300ms)
 
 **使用示例**:
 
 ```bash
 # 基本用法
 python udpclient.py 127.0.0.1 8888
-
-# 指定超时时间
-python udpclient.py 127.0.0.1 8888 500
 
 # 使用localhost
 python udpclient.py localhost 8888
@@ -203,7 +199,7 @@ python udpclient.py localhost 8888
 - 连接建立过程
 - 数据包发送和接收状态
 - 重传信息
-- 传输统计信息（丢包率、成功率、RTT 统计等）
+- 传输统计信息（丢包率、RTT 统计等）
 
 ### 2. UDP 服务器程序 (udpserver.py)
 
@@ -252,6 +248,15 @@ python udpserver.py localhost 8888 0.05
 在`udpclient.py`中可以修改以下配置：
 
 ```python
+# 初始超时时间（秒）
+self.initial_timeout = 0.3  # 300ms
+
+# 最小超时时间（秒）
+min_timeout = 0.1  # 100ms
+
+# 超时倍数因子
+timeout_factor = 5  # 超时时间 = 平均RTT × 5
+
 # 滑动窗口大小（字节）
 self.window_size = 400
 
@@ -308,3 +313,4 @@ self.connections: Dict[Tuple[str, int], Dict] = {}
 4. **文件编码**: 输入文件建议使用 UTF-8 编码
 5. **并发限制**: TCP 服务器默认支持 5 个并发连接
 6. **UDP 丢包模拟**: UDP 服务器可以模拟网络丢包，用于测试客户端重传机制
+7. **pandas 依赖**: 如未安装 pandas，UDP 客户端的 RTT 统计功能将受限

@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-UDP服务器端程序
-实现可靠传输协议，模拟TCP连接建立和数据传输
-"""
-
 import socket
 import struct
 import random
@@ -45,7 +39,7 @@ class UDPServer:
         
         # 连接状态管理
         self.connections: Dict[Tuple[str, int], Dict] = {}
-        self.seq_num = 0
+        self.last_cleanup = time.time()
         
         print(f"UDP服务器启动在 {host}:{port}")
         print(f"丢包率设置为: {drop_rate * 100}%")
@@ -84,6 +78,18 @@ class UDPServer:
         """决定是否丢弃数据包"""
         return random.random() < self.drop_rate
     
+    def cleanup_expired_connections(self):
+        """清理超时连接"""
+        current_time = time.time()
+        expired = []
+        for addr, conn in self.connections.items():
+            if current_time - conn['last_activity'] > 300:  # 5分钟超时
+                expired.append(addr)
+        
+        for addr in expired:
+            del self.connections[addr]
+            print(f"清理超时连接: {addr}")
+    
     def handle_connection_establishment(self, client_addr: Tuple[str, int], packet: bytes):
         """处理连接建立过程"""
         flags, seq_num, ack_num, length, data = self.parse_packet(packet)
@@ -97,9 +103,10 @@ class UDPServer:
             # 初始化连接状态
             self.connections[client_addr] = {
                 'state': SYN_RECEIVED,
-                'seq_num': random.randint(1000, 9999),
-                'ack_num': seq_num + 1,
-                'start_time': time.time()
+                'seq_num': random.randint(1000, 9999),  # 服务器初始序列号
+                'ack_num': seq_num + 1,  # 期望的下一个序列号 (SYN占用一个序号)
+                'start_time': time.time(),
+                'last_activity': time.time()
             }
             
             # 发送SYN+ACK
@@ -110,12 +117,18 @@ class UDPServer:
             )
             
             self.socket.sendto(syn_ack_packet, client_addr)
-            print(f"发送SYN+ACK到 {client_addr}")
+            print(f"发送SYN+ACK到 {client_addr}, 序列号: {self.connections[client_addr]['seq_num']}, 确认号: {self.connections[client_addr]['ack_num']}")
             
         elif flags & ACK and client_addr in self.connections:
             if self.connections[client_addr]['state'] == SYN_RECEIVED:
-                self.connections[client_addr]['state'] = ESTABLISHED
-                print(f"连接建立完成: {client_addr}")
+                # 验证ACK号是否正确
+                expected_ack = self.connections[client_addr]['seq_num'] + 1
+                if ack_num == expected_ack:
+                    self.connections[client_addr]['state'] = ESTABLISHED
+                    self.connections[client_addr]['last_activity'] = time.time()
+                    print(f"连接建立完成: {client_addr}")
+                else:
+                    print(f"无效的ACK号: {ack_num}, 期望 {expected_ack}")
     
     def handle_data_transmission(self, client_addr: Tuple[str, int], packet: bytes):
         """处理数据传输"""
@@ -133,25 +146,40 @@ class UDPServer:
             print(f"客户端 {client_addr} 连接状态不正确: {self.connections[client_addr]['state']}")
             return
             
-        print(f"收到来自 {client_addr} 的数据包，序列号: {seq_num}, 长度: {length}")
+        # 更新最后活动时间
+        self.connections[client_addr]['last_activity'] = time.time()
+        
+        print(f"收到来自 {client_addr} 的数据包，序列号: {seq_num}, 长度: {length}, 期望序列号: {self.connections[client_addr]['ack_num']}")
+        
+        # 检查序列号是否匹配期望值
+        if seq_num != self.connections[client_addr]['ack_num']:
+            print(f"序列号不匹配: 收到 {seq_num}, 期望 {self.connections[client_addr]['ack_num']}")
+            # 发送重复ACK
+            ack_packet = self.create_packet(
+                ACK,
+                self.connections[client_addr]['seq_num'],
+                self.connections[client_addr]['ack_num']
+            )
+            self.socket.sendto(ack_packet, client_addr)
+            return
         
         # 模拟丢包
         if self.should_drop_packet():
             print(f"模拟丢包: 序列号 {seq_num}")
             return
         
+        # 更新期望的序列号
+        self.connections[client_addr]['ack_num'] = seq_num + length
+        
         # 发送确认
         ack_packet = self.create_packet(
             ACK,
             self.connections[client_addr]['seq_num'],
-            seq_num + length
+            self.connections[client_addr]['ack_num']
         )
         
         self.socket.sendto(ack_packet, client_addr)
-        print(f"发送ACK到 {client_addr}, 确认序列号: {seq_num + length}")
-        
-        # 更新连接状态
-        self.connections[client_addr]['ack_num'] = seq_num + length
+        print(f"发送ACK到 {client_addr}, 序列号: {self.connections[client_addr]['seq_num']}, 确认号: {self.connections[client_addr]['ack_num']}")
     
     def handle_connection_termination(self, client_addr: Tuple[str, int], packet: bytes):
         """处理连接终止"""
@@ -165,13 +193,13 @@ class UDPServer:
             return
             
         if flags & FIN:
-            print(f"收到来自 {client_addr} 的FIN包")
+            print(f"收到来自 {client_addr} 的FIN包，序列号: {seq_num}")
             
             # 发送FIN+ACK
             fin_ack_packet = self.create_packet(
                 FIN | ACK,
                 self.connections[client_addr]['seq_num'],
-                seq_num + 1
+                seq_num + 1  # 确认号 = 收到的序列号 + 1
             )
             
             self.socket.sendto(fin_ack_packet, client_addr)
@@ -182,13 +210,18 @@ class UDPServer:
             print(f"连接终止: {client_addr}")
     
     def run(self):
-        """运行服务器"""
         print("服务器开始监听...")
+        last_cleanup = time.time()
         
         try:
             while True:
                 try:
                     packet, client_addr = self.socket.recvfrom(1024)
+                    
+                    # 定期清理超时连接
+                    if time.time() - last_cleanup > 60:  # 每分钟清理一次
+                        self.cleanup_expired_connections()
+                        last_cleanup = time.time()
                     
                     # 解析数据包
                     flags, seq_num, ack_num, length, data = self.parse_packet(packet)
@@ -207,10 +240,17 @@ class UDPServer:
                     elif flags & ACK:
                         # 处理纯ACK包
                         if client_addr in self.connections:
+                            # 更新最后活动时间
+                            self.connections[client_addr]['last_activity'] = time.time()
+                            
                             if self.connections[client_addr]['state'] == SYN_RECEIVED:
-                                self.connections[client_addr]['state'] = ESTABLISHED
-                                print(f"连接建立完成: {client_addr}")
-                            self.connections[client_addr]['ack_num'] = ack_num
+                                # 验证ACK号是否正确
+                                expected_ack = self.connections[client_addr]['seq_num'] + 1
+                                if ack_num == expected_ack:
+                                    self.connections[client_addr]['state'] = ESTABLISHED
+                                    print(f"连接建立完成: {client_addr}")
+                                else:
+                                    print(f"无效的ACK号: {ack_num}, 期望 {expected_ack}")
                     
                 except socket.error as e:
                     print(f"Socket错误: {e}")
@@ -222,7 +262,6 @@ class UDPServer:
             self.socket.close()
 
 def main():
-    """主函数"""
     # 检查参数数量
     if len(sys.argv) != 4:
         print("错误: 参数数量不正确")
@@ -281,4 +320,4 @@ def main():
     server.run()
 
 if __name__ == "__main__":
-    main() 
+    main()
