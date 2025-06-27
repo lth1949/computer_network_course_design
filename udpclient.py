@@ -17,10 +17,10 @@ DATA = 0x08         # 数据标志
 RST = 0x10          # 重置标志
 
 # 协议状态
-CLOSED = 0
-SYN_SENT = 1
-ESTABLISHED = 2
-FIN_WAIT = 3
+CLOSED = 0          #连接处于关闭状态。这是TCP连接的初始状态和最终状态
+SYN_SENT = 1        #客户端已经发送了SYN（同步）包以初始化连接，但尚未收到服务器的SYN-ACK（同步确认）响应
+ESTABLISHED = 2     #连接已经成功建立，客户端和服务器可以进行数据传输
+FIN_WAIT = 3        #客户端已经发送了FIN（终止）包以关闭连接，但尚未收到服务器的ACK（确认）响应
 
 class UDPClient:
     def __init__(self, server_host: str, server_port: int):
@@ -328,7 +328,7 @@ class UDPClient:
     
     def receive_acks(self):
         """接收确认包的线程函数"""
-        while self.state == ESTABLISHED:
+        while self.state == ESTABLISHED:      #循环监听
             try:
                 packet, addr = self.socket.recvfrom(1024)
                 flags, seq_num, ack_num, length, data = self.parse_packet(packet)
@@ -339,7 +339,7 @@ class UDPClient:
                 if flags & ACK:
                     self.handle_ack(ack_num)
                     
-            except socket.timeout:
+            except socket.timeout:  #如果捕获到 socket.timeout 异常，表示接收数据时超时，继续等待下一个数据包
                 continue
             except Exception as e:
                 print(f"接收确认包错误: {e}")

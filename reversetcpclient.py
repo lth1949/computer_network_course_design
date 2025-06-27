@@ -89,6 +89,7 @@ def main():
     if not re.match(r"^[\w\-\./]+$", input_file):
         print("Error: Invalid input file path format")
         print(f"Current path: {input_file}")
+        #支持的文件路径格式，即只能包含字母、数字、下划线、连字符、点和斜杠。
         print("Supported format: letters, numbers, underscore, hyphen, dot, slash")
         sys.exit(1)
     

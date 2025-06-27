@@ -22,19 +22,21 @@ def handle_client(conn, addr):
         agree_packet = struct.pack('>HI', 2, 0)
         conn.sendall(agree_packet)
         
-        # 处理数据块请求
+       # 处理数据块请求
         for _ in range(chunks_num):
-            # 接收ReverseRequest
+            # 接收ReverseRequest报文
             req_header = conn.recv(6)
             if len(req_header) < 6:
                 print(f"Incomplete request header from {addr}")
                 break
+            # 解包ReverseRequest报文，获取类型和数据长度
             r_type, data_len = struct.unpack('>HI', req_header)
             if r_type != 3:
                 print(f"Invalid request type from {addr}")
                 break
             
             data = b''
+            # 接收完整的数据块
             while len(data) < data_len:
                 chunk = conn.recv(data_len - len(data))
                 if not chunk:
@@ -93,8 +95,9 @@ def main():
         print(f"Port: {port}")
         print("Try using a higher port number or run with administrator privileges")
         sys.exit(1)
-    except OSError as e:
-        if e.errno == 48:  # Address already in use
+    except OSError as e:  #如果端口已经被占用，会捕获OSError异常，
+        #并检查错误码是否为48（表示地址已经在使用）。如果是，则提示用户使用不同的端口号。
+        if e.errno == 48:  
             print("Error: Port already in use")
             print(f"Port: {port}")
             print("Try using a different port number")
