@@ -52,9 +52,9 @@ class UDPClient:
         self.total_bytes_sent = 0  # 累计发送的字节数
         
         # 数据包管理
-        self.packets: Dict[int, Dict] = {}  # 存储已发送的数据包（key为序列号）
-        self.packet_times: Dict[int, float] = {}  # 存储发送时间
-        self.retransmit_count: Dict[int, int] = {}  # 重传次数
+        self.packets: Dict[int, Dict] = {}          # 已发送数据包 {序列号: 包信息}
+        self.packet_times: Dict[int, float] = {}    # 包发送时间 {序列号: 时间戳}
+        self.retransmit_count: Dict[int, int] = {}  # 重传次数 {序列号: 次数}
         
         # 统计信息
         self.rtt_list = []  # 存储所有RTT样本
@@ -64,10 +64,7 @@ class UDPClient:
         self.expected_packets = 30
         
         # 线程锁
-        self.lock = threading.Lock()
-        
-        # 连接建立标志
-        self.connection_established = False
+        self.lock = threading.Lock()        
         
         print(f"UDP客户端初始化完成")
         print(f"服务器地址: {server_host}:{server_port}")
@@ -137,7 +134,6 @@ class UDPClient:
                 
                 self.state = ESTABLISHED
                 self.ack_num = seq_num + 1
-                self.connection_established = True
                 self.next_seq_num = self.initial_seq_num + 1  # 下一个数据包从初始序列号+1开始
                 self.base = self.initial_seq_num + 1  # 窗口起始位置更新
                 print("连接建立成功")
@@ -167,7 +163,7 @@ class UDPClient:
                 if flags & FIN and flags & ACK:
                     print("连接断开成功")
                     
-                    # 发送ACK
+                    # 发送最终ACK
                     ack_packet = self.create_packet(ACK, self.next_seq_num + 1, seq_num + 1)
                     self.socket.sendto(ack_packet, self.server_addr)
                     
@@ -349,14 +345,14 @@ class UDPClient:
         """发送数据"""
         print("开始发送数据...")
         
-        # 启动接收确认包的线程
+        # 启动接收确认包的线程（发数据和接受ack两个线程）
         ack_thread = threading.Thread(target=self.receive_acks)
-        ack_thread.daemon = True
-        ack_thread.start()
+        ack_thread.daemon = True  #设置为守护线程，当主线程结束时，这个线程也会被强制结束
+        ack_thread.start()        #启动线程
         
         packet_id = 1
         bytes_sent = 0
-        max_packets = self.expected_packets
+        max_packets = self.expected_packets   #发30个数据包包
         
         while packet_id <= max_packets:
             # 生成随机大小的数据包 (40-80字节)
@@ -472,8 +468,6 @@ class UDPClient:
             
         except Exception as e:
             print(f"运行错误: {e}")
-            import traceback
-            traceback.print_exc()
         finally:
             self.socket.close()
 

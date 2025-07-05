@@ -8,18 +8,18 @@ import re
 from typing import Dict, List, Tuple
 
 # 协议常量
-SYN = 0x01          # 同步标志
-ACK = 0x02          # 确认标志
-FIN = 0x04          # 结束标志
-DATA = 0x08         # 数据标志
-RST = 0x10          # 重置标志
+SYN = 0x01          # 同步标志  00000001
+ACK = 0x02          # 确认标志  00000010
+FIN = 0x04          # 结束标志  00000100
+DATA = 0x08         # 数据标志  00001000
+RST = 0x10          # 重置标志  00010000
 
 # 协议状态
-CLOSED = 0
-LISTEN = 1
-SYN_RECEIVED = 2
-ESTABLISHED = 3
-FIN_WAIT = 4
+CLOSED = 0          # 连接关闭
+LISTEN = 1          # 监听状态
+SYN_RECEIVED = 2    # 收到SYN包
+ESTABLISHED = 3     # 连接已建立
+FIN_WAIT = 4        # 等待结束
 
 class UDPServer:
     def __init__(self, host='0.0.0.0', port=8888, drop_rate=0.1):
@@ -38,8 +38,8 @@ class UDPServer:
         self.socket.bind((host, port))
         
         # 连接状态管理
-        self.connections: Dict[Tuple[str, int], Dict] = {}
-        self.last_cleanup = time.time()
+        self.connections: Dict[Tuple[str, int], Dict] = {}  #Key：客户端地址元组 (IP, port)  Value：连接状态字典
+        self.last_cleanup = time.time()       #上次清理超时连接的时间戳
         
         print(f"UDP服务器启动在 {host}:{port}")
         print(f"丢包率设置为: {drop_rate * 100}%")
@@ -55,7 +55,7 @@ class UDPServer:
         +--------+--------+--------+--------+--------+
         """
         length = len(data)
-        packet = struct.pack('!BIIH', flags, seq_num, ack_num, length) + data
+        packet = struct.pack('!BIIH', flags, seq_num, ack_num, length) + data #！：网络字节序大端模式，B：1字节，I：4字节，H：2字节
         return packet
     
     def parse_packet(self, packet: bytes) -> Tuple[int, int, int, int, bytes]:
@@ -86,6 +86,7 @@ class UDPServer:
             if current_time - conn['last_activity'] > 300:  # 5分钟超时
                 expired.append(addr)
         
+        #删除超时连接并打印日志
         for addr in expired:
             del self.connections[addr]
             print(f"清理超时连接: {addr}")
@@ -94,6 +95,7 @@ class UDPServer:
         """处理连接建立过程"""
         flags, seq_num, ack_num, length, data = self.parse_packet(packet)
         
+        #如果数据包格式错误
         if flags is None:
             return
             
@@ -103,15 +105,15 @@ class UDPServer:
             # 初始化连接状态
             self.connections[client_addr] = {
                 'state': SYN_RECEIVED,
-                'seq_num': random.randint(1000, 9999),  # 服务器初始序列号
+                'seq_num': random.randint(1000, 9999),  # 服务器初始序列号  在TCP三次握手中，客户端和服务器各自生成独立的随机初始序列号
                 'ack_num': seq_num + 1,  # 期望的下一个序列号 (SYN占用一个序号)
-                'start_time': time.time(),
-                'last_activity': time.time()
+                'start_time': time.time(),     #记录连接开始时间
+                'last_activity': time.time()   #记录最后活动时间
             }
             
             # 发送SYN+ACK
             syn_ack_packet = self.create_packet(
-                SYN | ACK,
+                SYN | ACK, #按位或操作，表示将SYN和ACK标志位都设置为1
                 self.connections[client_addr]['seq_num'],
                 self.connections[client_addr]['ack_num']
             )
@@ -231,32 +233,20 @@ class UDPServer:
                         continue
                     
                     # 根据标志位处理不同类型的包
-                    if flags & SYN:
+                    if flags & (SYN | ACK):
                         self.handle_connection_establishment(client_addr, packet)
                     elif flags & DATA:
                         self.handle_data_transmission(client_addr, packet)
                     elif flags & FIN:
                         self.handle_connection_termination(client_addr, packet)
-                    elif flags & ACK:
-                        # 处理纯ACK包
-                        if client_addr in self.connections:
-                            # 更新最后活动时间
-                            self.connections[client_addr]['last_activity'] = time.time()
-                            
-                            if self.connections[client_addr]['state'] == SYN_RECEIVED:
-                                # 验证ACK号是否正确
-                                expected_ack = self.connections[client_addr]['seq_num'] + 1
-                                if ack_num == expected_ack:
-                                    self.connections[client_addr]['state'] = ESTABLISHED
-                                    print(f"连接建立完成: {client_addr}")
-                                else:
-                                    print(f"无效的ACK号: {ack_num}, 期望 {expected_ack}")
+                    
                     
                 except socket.error as e:
                     print(f"Socket错误: {e}")
                     continue
                     
-        except KeyboardInterrupt:
+        except KeyboardInterrupt:  #当用户想要停止服务器时，可以按下Ctrl+C，
+                                   #程序会捕获到KeyboardInterrupt异常，打印一条消息，然后退出run方法
             print("\n服务器关闭")
         finally:
             self.socket.close()

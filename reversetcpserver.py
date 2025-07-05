@@ -4,6 +4,12 @@ import threading
 import struct
 import re
 
+#类型值	 报文名称	 发送方	        说明
+#1	Initialization	客户端	通知服务器数据块数量（chunks_num），length表示后续数据块数量。
+#2	Agree	服务器	服务器确认接收初始化请求，length=0（无数据）。
+#3	ReverseRequest	客户端	请求服务器反转数据，length 表示后续数据的字节长度。
+#4	ReverseAnswer	服务器	返回反转后的数据，length 表示后续数据的字节长度。
+
 #处理单个线程
 def handle_client(conn, addr):
     print(f"New connection from {addr}")
@@ -13,7 +19,7 @@ def handle_client(conn, addr):
         if len(init_header) < 6:
             print(f"Incomplete initialization header from {addr}")
             return
-        i_type, chunks_num = struct.unpack('>HI', init_header)
+        i_type, chunks_num = struct.unpack('>HI', init_header)   # 大端序，2字节类型 + 4字节长度
         if i_type != 1:
             print(f"Invalid initialization type from {addr}")
             return
@@ -85,7 +91,8 @@ def main():
     #创建TCP服务器
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  #设置端口复用
+        #设置端口复用，服务器崩溃或主动关闭后，可以快速重启而不必等待系统释放端口
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
         server_socket.bind(('172.31.53.98', port))
         server_socket.listen(5)
         print(f"Server started successfully, listening on port {port}...")
@@ -113,9 +120,9 @@ def main():
             conn, addr = server_socket.accept()
             #添加新线程
             client_thread = threading.Thread(target=handle_client, args=(conn, addr))
-            client_thread.daemon = True
-            client_thread.start()
-    except KeyboardInterrupt:
+            client_thread.daemon = True    #设置为守护线程，当主线程结束时，这个线程也会被强制结束
+            client_thread.start()          #启动线程
+    except KeyboardInterrupt: 
         print("\nServer shutting down...")
     except Exception as e:
         print(f"Server runtime error: {e}")
